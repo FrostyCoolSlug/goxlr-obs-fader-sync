@@ -1,0 +1,27 @@
+[package]
+name = "goxlr-obs-fader-sync"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+obws = {version = "0.10.0", features=["events"] }
+
+anyhow = "1.0.66"
+tokio = {version = "1.22.0", features=["full"]}
+
+url = "2.3.1"
+futures-util = "0.3.25"
+tokio-tungstenite = "0.18.0"
+
+json-patch = "0.2.6"
+serde_json = "1.0.89"
+serde = { version = "1.0.148", features=["derive"] }
+
+# When the GoXLR packages are included, we need to explicitly include this?
+enumset = { version = "1.0.12", features=["serde"] }
+
+# Grab the GoXLR Structures
+goxlr-ipc = { git="https://github.com/GoXLR-on-Linux/goxlr-utility.git", branch="dev-0.8.0" }
+goxlr-types = { git="https://github.com/GoXLR-on-Linux/goxlr-utility.git", branch="dev-0.8.0", features=["serde", "enumset"] }

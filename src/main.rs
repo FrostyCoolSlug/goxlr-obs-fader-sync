@@ -1,6 +1,6 @@
 use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
-use goxlr_ipc::{DaemonRequest, DaemonResponse, DaemonStatus};
+use goxlr_ipc::{DaemonRequest, DaemonResponse, DaemonStatus, WebsocketRequest, WebsocketResponse};
 use goxlr_types::ChannelName;
 
 use obws::requests::inputs::Volume;
@@ -58,7 +58,11 @@ async fn sync_goxlr(sender: Sender<u8>) -> Result<()> {
     let (mut ws_stream, _) = connect_async(url).await?;
 
     println!("Connected to GoXLR..");
-    let initial_message = DaemonRequest::GetStatus;
+    let initial_message = WebsocketRequest {
+        id: 0,
+        data: DaemonRequest::GetStatus
+    };
+
     let message = Message::Text(serde_json::to_string(&initial_message)?);
 
     let mut last_volume = 0;
@@ -69,10 +73,10 @@ async fn sync_goxlr(sender: Sender<u8>) -> Result<()> {
                 if let Some(msg) = msg {
                     let msg = msg?;
                     if msg.is_text() {
-                        let result = serde_json::from_str::<DaemonResponse>(msg.to_text()?);
+                        let result = serde_json::from_str::<WebsocketResponse>(msg.to_text()?);
 
                         if let Ok(result) = result {
-                            match result {
+                            match result.data {
                                 DaemonResponse::Ok => {}
                                 DaemonResponse::Error(err) => {
                                     eprintln!("Error From GoXLR Utility: {:?}", err);

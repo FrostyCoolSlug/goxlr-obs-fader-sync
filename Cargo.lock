@@ -544,7 +544,7 @@ dependencies = [
 [[package]]
 name = "goxlr-ipc"
 version = "0.7.1"
-source = "git+https://github.com/GoXLR-on-Linux/goxlr-utility.git?branch=dev-0.8.0#2eda92ca7e2c341596dc178162dcd46f2d00d086"
+source = "git+https://github.com/GoXLR-on-Linux/goxlr-utility.git?branch=dev-0.8.0#cd07ee67f3f8bedbd58c7c7ca3d17b7f878d1700"
 dependencies = [
  "anyhow",
  "enum-map",
@@ -581,7 +581,7 @@ dependencies = [
 [[package]]
 name = "goxlr-types"
 version = "0.7.1"
-source = "git+https://github.com/GoXLR-on-Linux/goxlr-utility.git?branch=dev-0.8.0#2eda92ca7e2c341596dc178162dcd46f2d00d086"
+source = "git+https://github.com/GoXLR-on-Linux/goxlr-utility.git?branch=dev-0.8.0#cd07ee67f3f8bedbd58c7c7ca3d17b7f878d1700"
 dependencies = [
  "derivative",
  "enum-map",

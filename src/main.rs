@@ -77,6 +77,7 @@ async fn sync_goxlr(sender: Sender<u8>) -> Result<()> {
 
                         if let Ok(result) = result {
                             match result.data {
+                                DaemonResponse::HttpState(_) => {}
                                 DaemonResponse::Ok => {}
                                 DaemonResponse::Error(err) => {
                                     eprintln!("Error From GoXLR Utility: {:?}", err);

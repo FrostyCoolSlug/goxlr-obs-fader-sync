@@ -336,6 +336,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f5a56d54c8dd9b3ad34752ed197a4eb2a6601bc010808eb097a04a58ae4c43e1"
 dependencies = [
  "enum-map-derive",
+ "serde",
 ]
 
 [[package]]
@@ -543,9 +544,10 @@ dependencies = [
 [[package]]
 name = "goxlr-ipc"
 version = "0.7.1"
-source = "git+https://github.com/GoXLR-on-Linux/goxlr-utility.git?branch=dev-0.8.0#7003f5ac3769eef63eeb09d5d153c7af008e69c8"
+source = "git+https://github.com/GoXLR-on-Linux/goxlr-utility.git?branch=dev-0.8.0#2eda92ca7e2c341596dc178162dcd46f2d00d086"
 dependencies = [
  "anyhow",
+ "enum-map",
  "enumset",
  "futures",
  "goxlr-types",
@@ -564,7 +566,6 @@ name = "goxlr-obs-fader-sync"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "enumset",
  "futures-util",
  "goxlr-ipc",
  "goxlr-types",
@@ -580,7 +581,7 @@ dependencies = [
 [[package]]
 name = "goxlr-types"
 version = "0.7.1"
-source = "git+https://github.com/GoXLR-on-Linux/goxlr-utility.git?branch=dev-0.8.0#7003f5ac3769eef63eeb09d5d153c7af008e69c8"
+source = "git+https://github.com/GoXLR-on-Linux/goxlr-utility.git?branch=dev-0.8.0#2eda92ca7e2c341596dc178162dcd46f2d00d086"
 dependencies = [
  "derivative",
  "enum-map",

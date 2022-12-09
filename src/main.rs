@@ -39,10 +39,18 @@ async fn main() -> Result<()> {
         select! {
             result = goxlr_rx.recv() => {
                 if let Some(volume) = result {
-                    let mul = volume as f32 / 255.;
+                    // Convert the Percent into an OBS DB rating..
+                    let volume = -100. + (((volume as f32 / 255.) * 100.));
+
+                    // TODO: This isn't *QUITE* right
+                    // From a volume perspective, OBS cuts out at around -50db, while we can still
+                    // hear audio from the GoXLR so the 'lower end' of this may need tweaking to
+                    // better represent what the user can hear.
+
+                    // For now, this is close enough!
 
                     // Update OBS..
-                    client.inputs().set_volume(OBS_AUDIO_SOURCE, Volume::Mul(mul)).await?;
+                    client.inputs().set_volume(OBS_AUDIO_SOURCE, Volume::Db(volume)).await?;
                 }
             },
         };

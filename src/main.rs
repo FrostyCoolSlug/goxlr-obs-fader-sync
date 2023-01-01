@@ -17,7 +17,7 @@ use url::Url;
 // Change these..
 static OBS_HOST: &str = "localhost";
 static OBS_PORT: u16 = 4455;
-static OBS_PASS: &str = "";
+static OBS_PASS: &str = "wVhgI4fvB8OfQ2wz";
 static OBS_AUDIO_SOURCE: &str = "Music";
 
 static GOXLR_CHANNEL: ChannelName = ChannelName::Music;
@@ -46,14 +46,22 @@ async fn main() -> Result<()> {
             result = goxlr_rx.recv() => {
                 if let Some(volume) = result {
                     // Convert the Percent into an OBS DB rating..
-                    let volume = -100. + (((volume as f32 / 255.) * 100.));
+                    let volume = if volume == 0 {
+                        -100.
+                    } else {
+                        // This *MOSTLY* matches audio through the range, at the extreme quiet end
+                        // OBS is marginally louder than the GoXLR, but otherwise the volumes
+                        // pretty much match... at least to my ears!
 
-                    // TODO: This isn't *QUITE* right
-                    // From a volume perspective, OBS cuts out at around -50db, while we can still
-                    // hear audio from the GoXLR so the 'lower end' of this may need tweaking to
-                    // better represent what the user can hear.
+                        // This was tested by enabling the Monitor in OBS for the Music channel,
+                        // configuring the GoXLR to mute to Phones, then switching between the two
+                        // while changing the volumes until they sounded similar.. It's not
+                        // scientific, YMMV.
 
-                    // For now, this is close enough!
+                        // Either way, GoXLR floor seems to be around -60db, so convert our volume
+                        // into that range, and send it to OBS.
+                        -100. + (((volume as f32 / 255.) * 60.)) + 40.
+                    };
 
                     // Update OBS..
                     client.inputs().set_volume(OBS_AUDIO_SOURCE, Volume::Db(volume)).await?;

@@ -14,14 +14,17 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
 
+// Change these..
 static OBS_HOST: &str = "localhost";
 static OBS_PORT: u16 = 4455;
 static OBS_PASS: &str = "";
 static OBS_AUDIO_SOURCE: &str = "Music";
 
+static GOXLR_CHANNEL: ChannelName = ChannelName::Music;
+
+// Leave these alone :)
 static GOXLR_SOCKET_PATH: &str = "/tmp/goxlr.socket";
 static GOXLR_NAMED_PIPE: &str = "@goxlr.socket";
-static GOXLR_CHANNEL: ChannelName = ChannelName::Music;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -149,5 +152,6 @@ async fn get_websocket_address() -> String {
     if status.bind_address != "0.0.0.0" && status.bind_address != "localhost" {
         address = status.bind_address.clone();
     }
+
     format!("ws://{}:{}/api/websocket", address, status.port)
 }

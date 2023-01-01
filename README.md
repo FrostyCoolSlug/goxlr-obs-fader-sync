@@ -30,8 +30,6 @@ static OBS_PORT: u16 = 4455;
 static OBS_PASS: &str = "";
 static OBS_AUDIO_SOURCE: &str = "Music";
 
-static GOXLR_HOST: &str = "localhost";
-static GOXLR_PORT: u16 = 14564;
 static GOXLR_CHANNEL: ChannelName = ChannelName::Music;
 ```
 
@@ -40,7 +38,7 @@ Update the values prefixed `OBS_` with the details which you aquired earlier.
 Update the values prefixed `GOXLR_` with values related to the GoXLR utility. Unless you're doing something special,
 you should only need to update `GOXLR_CHANNEL`.
 
-The `Music` channel is the default on this app, but any of the following `ChannelName`s are acceptable (case sensitive):
+The `Music` channel is the default on this app, but any of the following `ChannelName`s are acceptable (case-sensitive):
 
     Mic
     LineIn

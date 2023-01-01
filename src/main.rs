@@ -1,7 +1,10 @@
-use anyhow::Result;
+use anyhow::{Result};
 use futures_util::{SinkExt, StreamExt};
 use goxlr_ipc::{DaemonRequest, DaemonResponse, DaemonStatus, WebsocketRequest, WebsocketResponse};
+use goxlr_ipc::ipc_socket::Socket;
 use goxlr_types::ChannelName;
+use interprocess::local_socket::NameTypeSupport;
+use interprocess::local_socket::tokio::LocalSocketStream;
 
 use obws::requests::inputs::Volume;
 use obws::Client;
@@ -16,8 +19,8 @@ static OBS_PORT: u16 = 4455;
 static OBS_PASS: &str = "";
 static OBS_AUDIO_SOURCE: &str = "Music";
 
-static GOXLR_HOST: &str = "localhost";
-static GOXLR_PORT: u16 = 14564;
+static GOXLR_SOCKET_PATH: &str = "/tmp/goxlr.socket";
+static GOXLR_NAMED_PIPE: &str = "@goxlr.socket";
 static GOXLR_CHANNEL: ChannelName = ChannelName::Music;
 
 #[tokio::main]
@@ -58,14 +61,15 @@ async fn main() -> Result<()> {
 }
 
 async fn sync_goxlr(sender: Sender<u8>) -> Result<()> {
-    println!("Connecting to GoXLR Socket..");
-    let mut daemon_status = DaemonStatus::default();
+    println!("Determining Websocket Location..");
+    let address = get_websocket_address().await;
 
-    let url = format!("ws://{}:{}/api/websocket", GOXLR_HOST, GOXLR_PORT);
-    let url = Url::parse(&url).expect("Bad URL Provided");
+    println!("Connecting to GoXLR Websocket..");
+    let url = Url::parse(&address).expect("Bad URL Provided");
     let (mut ws_stream, _) = connect_async(url).await?;
 
     println!("Connected to GoXLR..");
+    let mut daemon_status = DaemonStatus::default();
     let initial_message = WebsocketRequest {
         id: 0,
         data: DaemonRequest::GetStatus
@@ -122,4 +126,28 @@ async fn sync_goxlr(sender: Sender<u8>) -> Result<()> {
             }
         }
     }
+}
+
+async fn get_websocket_address() -> String {
+    let connection = LocalSocketStream::connect(match NameTypeSupport::query() {
+        NameTypeSupport::OnlyPaths | NameTypeSupport::Both => GOXLR_SOCKET_PATH,
+        NameTypeSupport::OnlyNamespaced => GOXLR_NAMED_PIPE,
+    })
+        .await
+        .expect("Unable to connect to the GoXLR daemon Process");
+
+    let socket: Socket<DaemonResponse, DaemonRequest> = Socket::new(connection);
+    let mut client = goxlr_ipc::client::Client::new(socket);
+    client.poll_http_status().await.expect("Unable to fetch HTTP Status");
+
+    let status = client.http_status();
+    if !status.enabled {
+        panic!("Websocket is disabled, unable to proceed");
+    }
+
+    let mut address = String::from("localhost");
+    if status.bind_address != "0.0.0.0" && status.bind_address != "localhost" {
+        address = status.bind_address.clone();
+    }
+    format!("ws://{}:{}/api/websocket", address, status.port)
 }

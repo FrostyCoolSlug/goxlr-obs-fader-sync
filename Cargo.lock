@@ -574,6 +574,7 @@ dependencies = [
  "obws",
  "serde",
  "serde_json",
+ "strum",
  "tokio",
  "tokio-tungstenite 0.18.0",
  "url",

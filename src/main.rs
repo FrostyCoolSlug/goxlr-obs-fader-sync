@@ -1,7 +1,9 @@
 use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
-use goxlr_ipc::ipc_socket::Socket;
+use goxlr_ipc::clients::ipc::ipc_socket::Socket;
 use goxlr_ipc::{DaemonRequest, DaemonResponse, DaemonStatus, WebsocketRequest, WebsocketResponse};
+use goxlr_ipc::client::Client as GoXLRClient;
+use goxlr_ipc::clients::ipc::ipc_client::IPCClient;
 use goxlr_types::{ChannelName, FaderName, MuteFunction, MuteState};
 use interprocess::local_socket::tokio::LocalSocketStream;
 use interprocess::local_socket::NameTypeSupport;
@@ -77,7 +79,7 @@ async fn main() -> Result<()> {
                     }
                 }
             },
-        };
+        }
     }
 }
 
@@ -118,7 +120,6 @@ async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
 
                         if let Ok(result) = result {
                             match result.data {
-                                DaemonResponse::HttpState(_) => {}
                                 DaemonResponse::Ok => {}
                                 DaemonResponse::Error(err) => {
                                     eprintln!("Error From GoXLR Utility: {:?}", err);
@@ -204,9 +205,9 @@ async fn get_websocket_address() -> String {
     .expect("Unable to connect to the GoXLR daemon Process");
 
     let socket: Socket<DaemonResponse, DaemonRequest> = Socket::new(connection);
-    let mut client = goxlr_ipc::client::Client::new(socket);
+    let mut client = IPCClient::new(socket);
     client
-        .poll_http_status()
+        .poll_status()
         .await
         .expect("Unable to fetch HTTP Status");
 

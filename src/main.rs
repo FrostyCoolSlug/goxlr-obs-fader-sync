@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use futures_util::{SinkExt, StreamExt};
 use goxlr_ipc::clients::ipc::ipc_socket::Socket;
 use goxlr_ipc::{DaemonRequest, DaemonResponse, DaemonStatus, WebsocketRequest, WebsocketResponse};
@@ -13,6 +13,7 @@ use obws::requests::inputs::Volume;
 use obws::Client;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::{select, task};
+use tokio::sync::oneshot;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
@@ -43,8 +44,9 @@ async fn main() -> Result<()> {
     let client = Client::connect(OBS_HOST, OBS_PORT, password).await?;
 
     println!("OBS Connection Established, Attempting to connect to GoXLR Utility..");
+    let (goxlr_err_tx, goxlr_err_rx) = oneshot::channel();
     let (goxlr_tx, mut goxlr_rx) = channel(10);
-    task::spawn(sync_goxlr(goxlr_tx));
+    task::spawn(sync_goxlr(goxlr_tx, goxlr_err_tx));
 
     loop {
         select! {
@@ -79,6 +81,9 @@ async fn main() -> Result<()> {
                     }
                 }
             },
+            result = goxlr_err_rx.recv() => {
+
+            }
         }
     }
 }
@@ -89,13 +94,20 @@ enum OBSMessages {
     SetMuted(bool),
 }
 
-async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
+async fn sync_goxlr(sender: Sender<OBSMessages>, err_sender: oneshot::Sender<Err<String>>) -> Result<()> {
     println!("Determining Websocket Location..");
     let address = get_websocket_address().await;
 
     println!("Connecting to GoXLR Websocket..");
     let url = Url::parse(&address).expect("Bad URL Provided");
-    let (mut ws_stream, _) = connect_async(url).await?;
+
+    // Handle the Connection..
+    let connection = connect_async(url).await;
+    if let Err(error) = connection {
+        err_sender.send(format!("Error Connection to GoXLR: {:?}", error)).await;
+        bail!(error);
+    }
+    let (mut ws_stream, _) = connection.unwrap();
 
     println!("Connected to GoXLR..");
     let mut daemon_status = DaemonStatus::default();
@@ -132,7 +144,10 @@ async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
                                     if let Some(mixer) = daemon_status.mixers.values().next() {
                                         let volume = mixer.get_channel_volume(GOXLR_CHANNEL);
                                         last_volume = volume;
+
+                                        println!("Sending initial Volume Level..");
                                         sender.send(OBSMessages::SetVolume(volume)).await?;
+                                        println!("Initial Volume Sent..")
 
                                         // Firstly, are we attached to a fader?
                                         for fader in FaderName::iter() {
@@ -144,44 +159,62 @@ async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
                                                 if ((mute_type == MuteFunction::ToStream || mute_type == MuteFunction::All) && state == MuteState::MutedToX)
                                                 || (state == MuteState::MutedToAll) {
                                                     is_muted = true;
+                                                    println!("Sending Initial Mute state to Muted");
                                                     sender.send(OBSMessages::SetMuted(true)).await?;
+                                                    println!("Initial Mute state sent..");
                                                 } else {
                                                    // Not muted anymore..
                                                     is_muted = false;
+                                                    println!("Sending Initial Mute state to Unmuted");
                                                     sender.send(OBSMessages::SetMuted(false)).await?;
+                                                    println!("Initial Mute state sent..");
                                                 }
                                             }
                                         }
                                     }
                                 }
                                 DaemonResponse::Patch(patch) => {
+                                    println!("Converting Old Struct to JSON");
                                     let mut old = serde_json::to_value(&daemon_status)?;
+
+                                    println!("Patching..")
                                     json_patch::patch(&mut old, &patch)?;
+
+                                    println!("Rebuilding Status..")
                                     daemon_status = serde_json::from_value(old)?;
 
                                     // This *WILL* go weird if you have more than one GoXLR!
                                     if let Some(mixer) = daemon_status.mixers.values().next() {
                                         let volume = mixer.get_channel_volume(GOXLR_CHANNEL);
                                         if volume != last_volume {
+                                            println!("Volume Changed, sending message..");
                                             sender.send(OBSMessages::SetVolume(volume)).await?;
+                                            println!("Sent");
                                             last_volume = volume;
                                         }
 
+                                        println!("Checking Mute State..");
                                         for fader in FaderName::iter() {
                                             if mixer.fader_status[fader].channel == GOXLR_CHANNEL {
+                                                println!("Found Channel..")
                                                 let mute_type = mixer.fader_status[fader].mute_type;
                                                 let state = mixer.fader_status[fader].mute_state;
 
                                                 if ((mute_type == MuteFunction::ToStream || mute_type == MuteFunction::All) && state == MuteState::MutedToX)
                                                 || (state == MuteState::MutedToAll) {
+                                                    println!("Mute State Changed..");
                                                     if !is_muted {
                                                         is_muted = true;
+                                                        println!("Setting Channel Muted");
                                                         sender.send(OBSMessages::SetMuted(true)).await?;
+                                                        println!("Mute Update Sent..");
                                                     }
                                                 } else if is_muted {
                                                     // Not muted anymore..
                                                     is_muted = false;
+                                                    println!("Setting Channel Unmuted..");
                                                     sender.send(OBSMessages::SetMuted(false)).await?;
+                                                    println!("Mute Update Sent..");
                                                 }
                                             }
                                         }

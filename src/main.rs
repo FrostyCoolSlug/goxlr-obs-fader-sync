@@ -13,7 +13,6 @@ use obws::requests::inputs::Volume;
 use obws::Client;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::{select, task};
-use tokio::sync::oneshot;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 use url::Url;
@@ -44,9 +43,9 @@ async fn main() -> Result<()> {
     let client = Client::connect(OBS_HOST, OBS_PORT, password).await?;
 
     println!("OBS Connection Established, Attempting to connect to GoXLR Utility..");
-    let (goxlr_err_tx, goxlr_err_rx) = oneshot::channel();
+    //let (goxlr_err_tx, goxlr_err_rx) = oneshot::channel();
     let (goxlr_tx, mut goxlr_rx) = channel(10);
-    task::spawn(sync_goxlr(goxlr_tx, goxlr_err_tx));
+    task::spawn(sync_goxlr(goxlr_tx));
 
     loop {
         select! {
@@ -80,9 +79,6 @@ async fn main() -> Result<()> {
                         }
                     }
                 }
-            },
-            result = goxlr_err_rx.recv() => {
-
             }
         }
     }
@@ -94,7 +90,7 @@ enum OBSMessages {
     SetMuted(bool),
 }
 
-async fn sync_goxlr(sender: Sender<OBSMessages>, err_sender: oneshot::Sender<Err<String>>) -> Result<()> {
+async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
     println!("Determining Websocket Location..");
     let address = get_websocket_address().await;
 
@@ -104,7 +100,7 @@ async fn sync_goxlr(sender: Sender<OBSMessages>, err_sender: oneshot::Sender<Err
     // Handle the Connection..
     let connection = connect_async(url).await;
     if let Err(error) = connection {
-        err_sender.send(format!("Error Connection to GoXLR: {:?}", error)).await;
+        //err_sender.send(format!("Error Connection to GoXLR: {:?}", error)).await;
         bail!(error);
     }
     let (mut ws_stream, _) = connection.unwrap();
@@ -147,7 +143,7 @@ async fn sync_goxlr(sender: Sender<OBSMessages>, err_sender: oneshot::Sender<Err
 
                                         println!("Sending initial Volume Level..");
                                         sender.send(OBSMessages::SetVolume(volume)).await?;
-                                        println!("Initial Volume Sent..")
+                                        println!("Initial Volume Sent..");
 
                                         // Firstly, are we attached to a fader?
                                         for fader in FaderName::iter() {
@@ -177,10 +173,10 @@ async fn sync_goxlr(sender: Sender<OBSMessages>, err_sender: oneshot::Sender<Err
                                     println!("Converting Old Struct to JSON");
                                     let mut old = serde_json::to_value(&daemon_status)?;
 
-                                    println!("Patching..")
+                                    println!("Patching..");
                                     json_patch::patch(&mut old, &patch)?;
 
-                                    println!("Rebuilding Status..")
+                                    println!("Rebuilding Status..");
                                     daemon_status = serde_json::from_value(old)?;
 
                                     // This *WILL* go weird if you have more than one GoXLR!
@@ -196,7 +192,7 @@ async fn sync_goxlr(sender: Sender<OBSMessages>, err_sender: oneshot::Sender<Err
                                         println!("Checking Mute State..");
                                         for fader in FaderName::iter() {
                                             if mixer.fader_status[fader].channel == GOXLR_CHANNEL {
-                                                println!("Found Channel..")
+                                                println!("Found Channel..");
                                                 let mute_type = mixer.fader_status[fader].mute_type;
                                                 let state = mixer.fader_status[fader].mute_state;
 

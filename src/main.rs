@@ -177,7 +177,11 @@ async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
                                     json_patch::patch(&mut old, &patch)?;
 
                                     println!("Rebuilding Status..");
-                                    daemon_status = serde_json::from_value(old)?;
+                                    let result = serde_json::from_value(old);
+                                    match result {
+                                        Ok(status) => daemon_status = status,
+                                        Err(error) => println!("Failed to Serialise: {:?}", error),
+                                    }
 
                                     // This *WILL* go weird if you have more than one GoXLR!
                                     if let Some(mixer) = daemon_status.mixers.values().next() {

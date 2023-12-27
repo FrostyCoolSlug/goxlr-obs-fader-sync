@@ -128,7 +128,6 @@ async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
 
                         if let Ok(result) = result {
                             match result.data {
-                                DaemonResponse::Ok => {}
                                 DaemonResponse::Error(err) => {
                                     eprintln!("Error From GoXLR Utility: {:?}", err);
                                 }
@@ -170,13 +169,9 @@ async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
                                     }
                                 }
                                 DaemonResponse::Patch(patch) => {
-                                    println!("Converting Old Struct to JSON");
                                     let mut old = serde_json::to_value(&daemon_status)?;
-
-                                    println!("Patching..");
                                     json_patch::patch(&mut old, &patch)?;
 
-                                    println!("Rebuilding Status..");
                                     let result = serde_json::from_value(old);
                                     match result {
                                         Ok(status) => daemon_status = status,
@@ -187,9 +182,7 @@ async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
                                     if let Some(mixer) = daemon_status.mixers.values().next() {
                                         let volume = mixer.get_channel_volume(GOXLR_CHANNEL);
                                         if volume != last_volume {
-                                            println!("Volume Changed, sending message..");
                                             sender.send(OBSMessages::SetVolume(volume)).await?;
-                                            println!("Sent");
                                             last_volume = volume;
                                         }
 
@@ -220,6 +213,7 @@ async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
                                         }
                                     }
                                 }
+                                _ => {}
                             }
                         }
                     }

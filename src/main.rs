@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::hash::{Hash};
 use anyhow::{bail, Result};
 use futures_util::{SinkExt, StreamExt};
 use goxlr_ipc::clients::ipc::ipc_socket::Socket;
@@ -11,6 +13,7 @@ use strum::IntoEnumIterator;
 
 use obws::requests::inputs::Volume;
 use obws::Client;
+use once_cell::sync::Lazy;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::{select, task};
 use tokio_tungstenite::connect_async;
@@ -23,13 +26,55 @@ use crate::OBSMessages::{SetMuted, SetVolume};
 static OBS_HOST: &str = "localhost";
 static OBS_PORT: u16 = 4455;
 static OBS_PASS: &str = "wVhgI4fvB8OfQ2wz";
-static OBS_AUDIO_SOURCE: &str = "Music";
 
-static GOXLR_CHANNEL: ChannelName = ChannelName::Music;
+static CHANNEL_MAPPING: Lazy<HashMap<Channels, &str>> = Lazy::new(||
+    HashMap::from([
+        // Change or add Channel Mappings below.
+        (Channels::Music, "Music"),
+        (Channels::System, "System")
+    ])
+);
 
 // Leave these alone :)
 static GOXLR_SOCKET_PATH: &str = "/tmp/goxlr.socket";
 static GOXLR_NAMED_PIPE: &str = "@goxlr.socket";
+
+/*
+    This is slightly obnoxious, I don't derive Hash for the ChannelName enum in the utility, so
+    they can't be directly used, I'll fix this for 1.0.5, but for now, we'll re-declare and map.
+ */
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum Channels {
+    Mic,
+    LineIn,
+    Console,
+    System,
+    Game,
+    Chat,
+    Sample,
+    Music,
+    Headphones,
+    MicMonitor,
+    LineOut,
+}
+
+impl Channels {
+    fn get_channel_name(&self) -> ChannelName {
+        match self {
+            Channels::Mic => ChannelName::Mic,
+            Channels::LineIn => ChannelName::LineIn,
+            Channels::Console => ChannelName::Console,
+            Channels::System => ChannelName::System,
+            Channels::Game => ChannelName::Game,
+            Channels::Chat => ChannelName::Chat,
+            Channels::Sample => ChannelName::Sample,
+            Channels::Music => ChannelName::Music,
+            Channels::Headphones => ChannelName::Headphones,
+            Channels::MicMonitor => ChannelName::MicMonitor,
+            Channels::LineOut => ChannelName::LineOut,
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -52,7 +97,7 @@ async fn main() -> Result<()> {
             result = goxlr_rx.recv() => {
                 if let Some(result) = result {
                     match result {
-                        SetVolume(volume) => {
+                        SetVolume(channel, volume) => {
                             // Convert the Percent into an OBS DB rating..
                             let volume = if volume == 0 {
                                 -100.
@@ -72,10 +117,10 @@ async fn main() -> Result<()> {
                             };
 
                             // Update OBS..
-                            client.inputs().set_volume(OBS_AUDIO_SOURCE, Volume::Db(volume)).await?;
+                            client.inputs().set_volume(&channel, Volume::Db(volume)).await?;
                         }
-                        SetMuted(muted) => {
-                            client.inputs().set_muted(OBS_AUDIO_SOURCE, muted).await?;
+                        SetMuted(channel, muted) => {
+                            client.inputs().set_muted(&channel, muted).await?;
                         }
                     }
                 }
@@ -86,8 +131,8 @@ async fn main() -> Result<()> {
 
 #[derive(Debug)]
 enum OBSMessages {
-    SetVolume(u8),
-    SetMuted(bool),
+    SetVolume(String, u8),
+    SetMuted(String, bool),
 }
 
 async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
@@ -114,8 +159,8 @@ async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
 
     let message = Message::Text(serde_json::to_string(&initial_message)?);
 
-    let mut last_volume = 0;
-    let mut is_muted = false;
+    let mut last_volume_map: HashMap<Channels, u8> = Default::default();
+    let mut is_muted_map: HashMap<Channels, bool> = Default::default();
 
     ws_stream.send(message).await?;
     loop {
@@ -137,32 +182,35 @@ async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
 
                                     // Force a Volume Update to OBS..
                                     if let Some(mixer) = daemon_status.mixers.values().next() {
-                                        let volume = mixer.get_channel_volume(GOXLR_CHANNEL);
-                                        last_volume = volume;
+                                        for key in CHANNEL_MAPPING.keys() {
+                                            let volume = mixer.get_channel_volume(key.get_channel_name());
+                                            last_volume_map.insert(*key, volume);
 
-                                        println!("Sending initial Volume Level..");
-                                        sender.send(OBSMessages::SetVolume(volume)).await?;
-                                        println!("Initial Volume Sent..");
+                                            let obs_channel = String::from(CHANNEL_MAPPING[key]);
+                                            println!("Sending initial Volume Level for {}..", obs_channel);
+                                            sender.send(OBSMessages::SetVolume(obs_channel.clone(), volume)).await?;
+                                            println!("Initial Volume Sent..");
 
-                                        // Firstly, are we attached to a fader?
-                                        for fader in FaderName::iter() {
-                                            if mixer.fader_status[fader].channel == GOXLR_CHANNEL {
-                                                let mute_type = mixer.fader_status[fader].mute_type;
-                                                let state = mixer.fader_status[fader].mute_state;
+                                            // Firstly, are we attached to a fader?
+                                            for fader in FaderName::iter() {
+                                                if mixer.fader_status[fader].channel == key.get_channel_name() {
+                                                    let mute_type = mixer.fader_status[fader].mute_type;
+                                                    let state = mixer.fader_status[fader].mute_state;
 
-                                                // Here we go again :D
-                                                if ((mute_type == MuteFunction::ToStream || mute_type == MuteFunction::All) && state == MuteState::MutedToX)
-                                                || (state == MuteState::MutedToAll) {
-                                                    is_muted = true;
-                                                    println!("Sending Initial Mute state to Muted");
-                                                    sender.send(OBSMessages::SetMuted(true)).await?;
-                                                    println!("Initial Mute state sent..");
-                                                } else {
-                                                   // Not muted anymore..
-                                                    is_muted = false;
-                                                    println!("Sending Initial Mute state to Unmuted");
-                                                    sender.send(OBSMessages::SetMuted(false)).await?;
-                                                    println!("Initial Mute state sent..");
+                                                    // Here we go again :D
+                                                    if ((mute_type == MuteFunction::ToStream || mute_type == MuteFunction::All) && state == MuteState::MutedToX)
+                                                    || (state == MuteState::MutedToAll) {
+                                                        is_muted_map.insert(*key, true);
+                                                        println!("Sending Initial Mute state to Muted");
+                                                        sender.send(OBSMessages::SetMuted(obs_channel.clone(), true)).await?;
+                                                        println!("Initial Mute state sent..");
+                                                    } else {
+                                                       // Not muted anymore..
+                                                        is_muted_map.insert(*key, false);
+                                                        println!("Sending Initial Mute state to Unmuted");
+                                                        sender.send(OBSMessages::SetMuted(obs_channel.clone(), false)).await?;
+                                                        println!("Initial Mute state sent..");
+                                                    }
                                                 }
                                             }
                                         }
@@ -180,34 +228,34 @@ async fn sync_goxlr(sender: Sender<OBSMessages>) -> Result<()> {
 
                                     // This *WILL* go weird if you have more than one GoXLR!
                                     if let Some(mixer) = daemon_status.mixers.values().next() {
-                                        let volume = mixer.get_channel_volume(GOXLR_CHANNEL);
-                                        if volume != last_volume {
-                                            sender.send(OBSMessages::SetVolume(volume)).await?;
-                                            last_volume = volume;
-                                        }
+                                        for key in CHANNEL_MAPPING.keys() {
+                                            let volume = mixer.get_channel_volume(key.get_channel_name());
 
-                                        println!("Checking Mute State..");
-                                        for fader in FaderName::iter() {
-                                            if mixer.fader_status[fader].channel == GOXLR_CHANNEL {
-                                                println!("Found Channel..");
-                                                let mute_type = mixer.fader_status[fader].mute_type;
-                                                let state = mixer.fader_status[fader].mute_state;
+                                            let obs_channel = String::from(CHANNEL_MAPPING[key]);
+                                            if volume != last_volume_map[key] {
+                                                sender.send(OBSMessages::SetVolume(obs_channel.clone(), volume)).await?;
+                                                last_volume_map.insert(*key, volume);
+                                            }
 
-                                                if ((mute_type == MuteFunction::ToStream || mute_type == MuteFunction::All) && state == MuteState::MutedToX)
-                                                || (state == MuteState::MutedToAll) {
-                                                    println!("Mute State Changed..");
-                                                    if !is_muted {
-                                                        is_muted = true;
-                                                        println!("Setting Channel Muted");
-                                                        sender.send(OBSMessages::SetMuted(true)).await?;
+                                            for fader in FaderName::iter() {
+                                                if mixer.fader_status[fader].channel == key.get_channel_name() {
+                                                    let mute_type = mixer.fader_status[fader].mute_type;
+                                                    let state = mixer.fader_status[fader].mute_state;
+
+                                                    if ((mute_type == MuteFunction::ToStream || mute_type == MuteFunction::All) && state == MuteState::MutedToX) || (state == MuteState::MutedToAll) {
+                                                        if !is_muted_map[key] {
+                                                            is_muted_map.insert(*key, true);
+                                                            println!("Setting Channel Muted");
+                                                            sender.send(OBSMessages::SetMuted(obs_channel.clone(),true)).await?;
+                                                            println!("Mute Update Sent..");
+                                                        }
+                                                    } else if is_muted_map[key] {
+                                                        is_muted_map.insert(*key, false);
+                                                        // Not muted anymore..
+                                                        println!("Setting Channel Unmuted..");
+                                                        sender.send(OBSMessages::SetMuted(obs_channel.clone(), false)).await?;
                                                         println!("Mute Update Sent..");
                                                     }
-                                                } else if is_muted {
-                                                    // Not muted anymore..
-                                                    is_muted = false;
-                                                    println!("Setting Channel Unmuted..");
-                                                    sender.send(OBSMessages::SetMuted(false)).await?;
-                                                    println!("Mute Update Sent..");
                                                 }
                                             }
                                         }
@@ -228,8 +276,8 @@ async fn get_websocket_address() -> String {
         NameTypeSupport::OnlyPaths | NameTypeSupport::Both => GOXLR_SOCKET_PATH,
         NameTypeSupport::OnlyNamespaced => GOXLR_NAMED_PIPE,
     })
-    .await
-    .expect("Unable to connect to the GoXLR daemon Process");
+        .await
+        .expect("Unable to connect to the GoXLR daemon Process");
 
     let socket: Socket<DaemonResponse, DaemonRequest> = Socket::new(connection);
     let mut client = IPCClient::new(socket);

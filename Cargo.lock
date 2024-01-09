@@ -638,6 +638,7 @@ dependencies = [
  "interprocess",
  "json-patch",
  "obws",
+ "once_cell",
  "serde",
  "serde_json",
  "strum",

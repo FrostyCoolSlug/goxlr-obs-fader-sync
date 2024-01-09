@@ -28,9 +28,18 @@ At the top of `main.rs`, there are several constants which will need updating (s
 static OBS_HOST: &str = "localhost";
 static OBS_PORT: u16 = 4455;
 static OBS_PASS: &str = "";
-static OBS_AUDIO_SOURCE: &str = "Music";
+```
 
-static GOXLR_CHANNEL: ChannelName = ChannelName::Music;
+Below this, is a mapping list, which will map a Channel on the GoXLR to an Audio Source in OBS, you can define as few
+or as many as you want, but there's no sanity checking, so if you overlap them there may be problems!
+```rust
+static CHANNEL_MAPPING: Lazy<HashMap<Channels, &str>> = Lazy::new(||
+    HashMap::from([
+        // Change or add Channel Mappings below.
+        (Channels::Music, "Music"),
+        (Channels::System, "System")
+    ])
+);
 ```
 
 Update the values prefixed `OBS_` with the details which you aquired earlier.

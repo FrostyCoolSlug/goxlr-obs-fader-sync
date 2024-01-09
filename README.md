@@ -36,6 +36,7 @@ or as many as you want, but there's no sanity checking, so if you overlap them t
 static CHANNEL_MAPPING: Lazy<HashMap<Channels, &str>> = Lazy::new(||
     HashMap::from([
         // Change or add Channel Mappings below.
+        // Format: (GoXLRChannel, OBSSource),
         (Channels::Music, "Music"),
         (Channels::System, "System")
     ])

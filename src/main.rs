@@ -30,6 +30,7 @@ static OBS_PASS: &str = "wVhgI4fvB8OfQ2wz";
 static CHANNEL_MAPPING: Lazy<HashMap<Channels, &str>> = Lazy::new(||
     HashMap::from([
         // Change or add Channel Mappings below.
+        // Format: (GoXLRChannel, OBSSource),
         (Channels::Music, "Music"),
         (Channels::System, "System")
     ])

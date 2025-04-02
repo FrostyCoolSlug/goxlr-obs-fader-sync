@@ -1,5 +1,9 @@
 # GoXLR -> OBS Fader Sync
 
+# ARCHIVED
+This code is archived, as it's no longer woriking with the latest version of the GoXLR Utility, it was simply made
+as a proof of concept.
+
 This project is primarily an API example for the [GoXLR Utility](https://github.com/GoXLR-on-Linux/goxlr-utility), and
 it's API.
 

@@ -7,6 +7,8 @@ as a proof of concept.
 This project is primarily an API example for the [GoXLR Utility](https://github.com/GoXLR-on-Linux/goxlr-utility), and
 it's API.
 
+---
+
 The goal is to automatically have OBS adjust the volume of an Audio Output source based on the volume of a GoXLR
 Channel. This is achieved by utilising the GoXLR Utility to get reports on volume changes, then using the
 obs-websocket plugin to update the stream volume.
